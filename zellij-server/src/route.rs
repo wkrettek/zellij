@@ -278,7 +278,10 @@ pub(crate) fn route_action(
         },
         Action::WriteToPaneId { bytes, pane_id } => {
             senders
-                .send_to_screen(ScreenInstruction::ClearScroll(client_id))
+                .send_to_screen(ScreenInstruction::ScrollToBottomWithPaneId(
+                    pane_id.into(),
+                    None,
+                ))
                 .with_context(err_context)?;
             senders
                 .send_to_screen(ScreenInstruction::WriteToPaneId(
@@ -290,7 +293,10 @@ pub(crate) fn route_action(
         },
         Action::WriteCharsToPaneId { chars, pane_id } => {
             senders
-                .send_to_screen(ScreenInstruction::ClearScroll(client_id))
+                .send_to_screen(ScreenInstruction::ScrollToBottomWithPaneId(
+                    pane_id.into(),
+                    None,
+                ))
                 .with_context(err_context)?;
             let bytes = chars.into_bytes();
             senders
@@ -302,14 +308,21 @@ pub(crate) fn route_action(
                 .with_context(err_context)?;
         },
         Action::Paste { chars, pane_id } => {
-            senders
-                .send_to_screen(ScreenInstruction::ClearScroll(client_id))
-                .with_context(err_context)?;
+            let pane_id = pane_id.map(|pane_id| pane_id.into());
+            if let Some(pane_id) = pane_id {
+                senders
+                    .send_to_screen(ScreenInstruction::ScrollToBottomWithPaneId(pane_id, None))
+                    .with_context(err_context)?;
+            } else {
+                senders
+                    .send_to_screen(ScreenInstruction::ClearScroll(client_id))
+                    .with_context(err_context)?;
+            }
             let bytes = chars.into_bytes();
             senders
                 .send_to_screen(ScreenInstruction::Paste(
                     bytes,
-                    pane_id.map(|p| p.into()),
+                    pane_id,
                     client_id,
                     Some(NotificationEnd::new(completion_tx)),
                 ))
@@ -3119,6 +3132,129 @@ fn send_output_to_client(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zellij_utils::{
+        channels::{self, SenderWithContext},
+        data::PaneId as ActionPaneId,
+    };
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum RoutedInputInstruction {
+        ClearScroll(ClientId),
+        ScrollToBottom(PaneId),
+        Write(Vec<u8>, PaneId),
+        Paste(Vec<u8>, Option<PaneId>, ClientId),
+    }
+
+    fn route_input_action(action: Action) -> Vec<RoutedInputInstruction> {
+        let (screen_sender, screen_receiver) = channels::unbounded();
+        let (plugin_sender, _plugin_receiver) = channels::unbounded();
+        let senders = ThreadSenders {
+            to_screen: Some(SenderWithContext::new(screen_sender)),
+            to_plugin: Some(SenderWithContext::new(plugin_sender)),
+            ..Default::default()
+        };
+
+        let route_thread = thread::spawn(move || {
+            let default_layout = Layout::default();
+            let client_keybinds = Keybinds::default();
+            route_action(
+                action,
+                7,
+                None,
+                None,
+                senders,
+                PluginCapabilities::default(),
+                ClientAttributes::default(),
+                None,
+                &default_layout,
+                None,
+                &client_keybinds,
+                InputMode::Normal,
+                None,
+            )
+            .unwrap()
+        });
+
+        let instructions = (0..2)
+            .map(|_| {
+                let (instruction, _) = screen_receiver.recv().unwrap();
+                match instruction {
+                    ScreenInstruction::ClearScroll(client_id) => {
+                        RoutedInputInstruction::ClearScroll(client_id)
+                    },
+                    ScreenInstruction::ScrollToBottomWithPaneId(pane_id, completion) => {
+                        assert!(completion.is_none());
+                        RoutedInputInstruction::ScrollToBottom(pane_id)
+                    },
+                    ScreenInstruction::WriteToPaneId(bytes, pane_id, completion) => {
+                        assert!(completion.is_some());
+                        RoutedInputInstruction::Write(bytes, pane_id)
+                    },
+                    ScreenInstruction::Paste(bytes, pane_id, client_id, completion) => {
+                        assert!(completion.is_some());
+                        RoutedInputInstruction::Paste(bytes, pane_id, client_id)
+                    },
+                    instruction => panic!("unexpected screen instruction: {instruction:?}"),
+                }
+            })
+            .collect();
+
+        route_thread.join().unwrap();
+        instructions
+    }
+
+    #[test]
+    fn targeted_writes_scroll_target_pane_to_bottom() {
+        let target = ActionPaneId::Terminal(9);
+        let expected_target = PaneId::Terminal(9);
+
+        for action in [
+            Action::WriteToPaneId {
+                bytes: b"bytes".to_vec(),
+                pane_id: target,
+            },
+            Action::WriteCharsToPaneId {
+                chars: "bytes".to_owned(),
+                pane_id: target,
+            },
+        ] {
+            assert_eq!(
+                route_input_action(action),
+                vec![
+                    RoutedInputInstruction::ScrollToBottom(expected_target),
+                    RoutedInputInstruction::Write(b"bytes".to_vec(), expected_target),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn targeted_paste_scrolls_target_pane_to_bottom() {
+        assert_eq!(
+            route_input_action(Action::Paste {
+                chars: "paste".to_owned(),
+                pane_id: Some(ActionPaneId::Plugin(4)),
+            }),
+            vec![
+                RoutedInputInstruction::ScrollToBottom(PaneId::Plugin(4)),
+                RoutedInputInstruction::Paste(b"paste".to_vec(), Some(PaneId::Plugin(4)), 7,),
+            ]
+        );
+    }
+
+    #[test]
+    fn untargeted_paste_clears_active_pane_scroll() {
+        assert_eq!(
+            route_input_action(Action::Paste {
+                chars: "paste".to_owned(),
+                pane_id: None,
+            }),
+            vec![
+                RoutedInputInstruction::ClearScroll(7),
+                RoutedInputInstruction::Paste(b"paste".to_vec(), None, 7),
+            ]
+        );
+    }
 
     #[test]
     fn test_notification_end_sets_affected_tab_id() {
