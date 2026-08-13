@@ -3389,20 +3389,14 @@ mod tests {
         };
 
         let route_thread = thread::spawn(move || {
-            let default_layout = Layout::default();
-            let client_keybinds = Keybinds::default();
             route_action(
                 action,
                 7,
                 None,
                 None,
                 senders,
-                PluginCapabilities::default(),
-                ClientAttributes::default(),
                 None,
-                &default_layout,
                 None,
-                &client_keybinds,
                 InputMode::Normal,
                 None,
             )
@@ -3434,6 +3428,7 @@ mod tests {
             .collect();
 
         route_thread.join().unwrap();
+        assert!(screen_receiver.try_recv().is_err());
         instructions
     }
 
