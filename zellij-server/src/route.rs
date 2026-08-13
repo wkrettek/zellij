@@ -3200,6 +3200,7 @@ mod tests {
             .collect();
 
         route_thread.join().unwrap();
+        assert!(screen_receiver.try_recv().is_err());
         instructions
     }
 
