@@ -896,6 +896,7 @@ impl From<crate::input::options::Options>
                 crate::input::options::OnForceClose::Detach => ProtoOnForceClose::Detach as i32,
             }),
             scroll_buffer_size: options.scroll_buffer_size.map(|s| s as u32),
+            fps: options.fps.map(|fps| fps.get()),
             copy_command: options.copy_command,
             copy_clipboard: options.copy_clipboard.map(|c| match c {
                 crate::input::options::Clipboard::System => ProtoClipboard::System as i32,
@@ -1014,6 +1015,10 @@ impl TryFrom<crate::client_server_contract::client_server_contract::Options>
                 })
                 .transpose()?,
             scroll_buffer_size: options.scroll_buffer_size.map(|s| s as usize),
+            fps: options
+                .fps
+                .map(crate::input::options::Fps::try_from)
+                .transpose()?,
             copy_command: options.copy_command,
             copy_clipboard: options
                 .copy_clipboard

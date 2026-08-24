@@ -13,7 +13,7 @@ use crate::input::layout::{
     Layout, PercentOrFixed, PluginUserConfiguration, RunPlugin, RunPluginOrAlias, TabLayoutInfo,
 };
 use crate::input::options::{
-    Clipboard, OnForceClose, Options, PaneFrameStyle, DEFAULT_WORD_SEPARATORS,
+    Clipboard, Fps, OnForceClose, Options, PaneFrameStyle, DEFAULT_WORD_SEPARATORS,
 };
 use crate::input::permission::{GrantedPermission, PermissionCache};
 use crate::input::plugins::PluginAliases;
@@ -2780,6 +2780,13 @@ impl Options {
         let scroll_buffer_size =
             kdl_property_first_arg_as_i64_or_error!(kdl_options, "scroll_buffer_size")
                 .map(|(scroll_buffer_size, _entry)| scroll_buffer_size as usize);
+        let fps = match kdl_property_first_arg_as_i64_or_error!(kdl_options, "fps") {
+            Some((value, entry)) => match Fps::try_from(value) {
+                Ok(fps) => Some(fps),
+                Err(error) => return Err(kdl_parsing_error!(error.to_string(), entry)),
+            },
+            None => None,
+        };
         let copy_command = kdl_property_first_arg_as_string_or_error!(kdl_options, "copy_command")
             .map(|(copy_command, _entry)| copy_command.to_string());
         let copy_clipboard =
@@ -2957,6 +2964,7 @@ impl Options {
             mirror_session,
             on_force_close,
             scroll_buffer_size,
+            fps,
             copy_command,
             copy_clipboard,
             copy_on_select,
@@ -3503,6 +3511,33 @@ impl Options {
         } else if add_comments {
             let mut node = create_node(10000);
             node.set_leading(format!("{}\n// ", comment_text));
+            Some(node)
+        } else {
+            None
+        }
+    }
+    fn fps_to_kdl(&self, add_comments: bool) -> Option<KdlNode> {
+        let create_node = |fps: Fps| -> KdlNode {
+            let mut node = KdlNode::new("fps");
+            node.push(KdlValue::Base10(i64::from(fps.get())));
+            node
+        };
+        if let Some(fps) = self.fps {
+            let mut node = create_node(fps);
+            if add_comments {
+                node.set_leading(
+                    "\n// Set the target terminal repaint rate from 1 through 1000 frames per second.\n"
+                        .to_owned(),
+                );
+            }
+            Some(node)
+        } else if add_comments {
+            let mut node = KdlNode::new("fps");
+            node.push(KdlValue::Base10(60));
+            node.set_leading(
+                "\n// Set the target terminal repaint rate from 1 through 1000 frames per second.\n// Default: 60\n// "
+                    .to_owned(),
+            );
             Some(node)
         } else {
             None
@@ -4661,6 +4696,9 @@ impl Options {
         }
         if let Some(scroll_buffer_size) = self.scroll_buffer_size_to_kdl(add_comments) {
             nodes.push(scroll_buffer_size);
+        }
+        if let Some(fps) = self.fps_to_kdl(add_comments) {
+            nodes.push(fps);
         }
         if let Some(copy_command) = self.copy_command_to_kdl(add_comments) {
             nodes.push(copy_command);
@@ -7546,6 +7584,47 @@ fn selection_options_default_to_none_when_unspecified() {
     let deserialized = Options::from_kdl(&document).unwrap();
     assert_eq!(deserialized.osc133_command_selection, None);
     assert_eq!(deserialized.word_separators, None);
+}
+
+#[test]
+fn fps_from_kdl_round_trips() {
+    let document: KdlDocument = "fps 60".parse().unwrap();
+    let parsed = Options::from_kdl(&document).unwrap();
+    assert_eq!(parsed.fps.map(|fps| fps.get()), Some(60));
+
+    let mut serialized = parsed.to_kdl(false);
+    let mut serialized_document = KdlDocument::new();
+    serialized_document.nodes_mut().append(&mut serialized);
+    let reparsed = Options::from_kdl(&serialized_document).unwrap();
+    assert_eq!(reparsed.fps, parsed.fps);
+}
+
+#[test]
+fn fps_defaults_to_none_when_unspecified() {
+    let document: KdlDocument = "".parse().unwrap();
+    let parsed = Options::from_kdl(&document).unwrap();
+    assert_eq!(parsed.fps, None);
+}
+
+#[test]
+fn zero_fps_is_rejected() {
+    let document: KdlDocument = "fps 0".parse().unwrap();
+    let error = Options::from_kdl(&document).unwrap_err();
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
+}
+
+#[test]
+fn negative_fps_is_rejected() {
+    let document: KdlDocument = "fps -1".parse().unwrap();
+    let error = Options::from_kdl(&document).unwrap_err();
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
+}
+
+#[test]
+fn fps_above_maximum_is_rejected() {
+    let document: KdlDocument = "fps 1001".parse().unwrap();
+    let error = Options::from_kdl(&document).unwrap_err();
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
 }
 
 #[test]

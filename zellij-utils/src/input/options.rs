@@ -9,6 +9,77 @@ use std::str::FromStr;
 use std::net::IpAddr;
 
 pub const DEFAULT_WORD_SEPARATORS: &str = "[]{}<>()";
+pub const MAX_FPS: u32 = 1000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(try_from = "u32", into = "u32")]
+pub struct Fps(u32);
+
+impl Fps {
+    pub const fn new(value: u32) -> Option<Self> {
+        if value > 0 && value <= MAX_FPS {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl TryFrom<u32> for Fps {
+    type Error = FpsParseError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Self::new(value).ok_or_else(|| FpsParseError(value.to_string()))
+    }
+}
+
+impl TryFrom<i64> for Fps {
+    type Error = FpsParseError;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        u32::try_from(value)
+            .ok()
+            .and_then(Self::new)
+            .ok_or_else(|| FpsParseError(value.to_string()))
+    }
+}
+
+impl From<Fps> for u32 {
+    fn from(fps: Fps) -> Self {
+        fps.get()
+    }
+}
+
+impl FromStr for Fps {
+    type Err = FpsParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .parse::<u32>()
+            .ok()
+            .and_then(Self::new)
+            .ok_or_else(|| FpsParseError(value.to_owned()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FpsParseError(String);
+
+impl std::fmt::Display for FpsParseError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "fps must be between 1 and {MAX_FPS}, found '{}'",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for FpsParseError {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ValueEnum)]
 pub enum OnForceClose {
@@ -182,6 +253,10 @@ pub struct Options {
     pub on_force_close: Option<OnForceClose>,
     #[clap(long, value_parser)]
     pub scroll_buffer_size: Option<usize>,
+
+    /// Target terminal repaint rate in frames per second, from 1 through 1000
+    #[clap(long, value_parser)]
+    pub fps: Option<Fps>,
 
     /// Switch to using a user supplied command for clipboard instead of OSC52
     #[clap(long, value_parser)]
@@ -460,6 +535,7 @@ impl Options {
         let theme_light = other.theme_light.or_else(|| self.theme_light.clone());
         let on_force_close = other.on_force_close.or(self.on_force_close);
         let scroll_buffer_size = other.scroll_buffer_size.or(self.scroll_buffer_size);
+        let fps = other.fps.or(self.fps);
         let copy_command = other.copy_command.or_else(|| self.copy_command.clone());
         let copy_clipboard = other.copy_clipboard.or(self.copy_clipboard);
         let copy_on_select = other.copy_on_select.or(self.copy_on_select);
@@ -546,6 +622,7 @@ impl Options {
             mirror_session,
             on_force_close,
             scroll_buffer_size,
+            fps,
             copy_command,
             copy_clipboard,
             copy_on_select,
@@ -625,6 +702,7 @@ impl Options {
         let theme_light = other.theme_light.or_else(|| self.theme_light.clone());
         let on_force_close = other.on_force_close.or(self.on_force_close);
         let scroll_buffer_size = other.scroll_buffer_size.or(self.scroll_buffer_size);
+        let fps = other.fps.or(self.fps);
         let copy_command = other.copy_command.or_else(|| self.copy_command.clone());
         let copy_clipboard = other.copy_clipboard.or(self.copy_clipboard);
         let copy_on_select = other.copy_on_select.or(self.copy_on_select);
@@ -707,6 +785,7 @@ impl Options {
             mirror_session,
             on_force_close,
             scroll_buffer_size,
+            fps,
             copy_command,
             copy_clipboard,
             copy_on_select,
@@ -781,5 +860,33 @@ mod tests {
             PaneFrameStyle::None
         );
         assert!("bogus".parse::<PaneFrameStyle>().is_err());
+    }
+
+    #[test]
+    fn fps_from_str_enforces_bounds() {
+        assert_eq!("1".parse::<Fps>().unwrap().get(), 1);
+        assert_eq!("1000".parse::<Fps>().unwrap().get(), 1000);
+        assert!("0".parse::<Fps>().is_err());
+        assert!("1001".parse::<Fps>().is_err());
+        assert!("-1".parse::<Fps>().is_err());
+    }
+
+    #[test]
+    fn fps_cli_enforces_bounds() {
+        use clap::Parser;
+
+        let valid = crate::cli::CliArgs::try_parse_from(["zellij", "options", "--fps", "1000"]);
+        assert_eq!(valid.unwrap().options().unwrap().fps.unwrap().get(), 1000);
+
+        let invalid = crate::cli::CliArgs::try_parse_from(["zellij", "options", "--fps", "1001"]);
+        assert!(invalid.is_err());
+    }
+
+    #[test]
+    fn fps_serde_enforces_bounds() {
+        assert_eq!(serde_json::from_str::<Fps>("60").unwrap().get(), 60);
+        assert!(serde_json::from_str::<Fps>("0").is_err());
+        assert!(serde_json::from_str::<Fps>("1001").is_err());
+        assert_eq!(serde_json::to_string(&Fps::new(60).unwrap()).unwrap(), "60");
     }
 }

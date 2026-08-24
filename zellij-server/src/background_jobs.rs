@@ -7,6 +7,7 @@ use zellij_utils::consts::{
 use zellij_utils::data::{Event, HttpVerb, LayoutInfo, SessionInfo, WebServerStatus};
 use zellij_utils::errors::{prelude::*, BackgroundJobContext, ContextType};
 use zellij_utils::input::layout::RunPlugin;
+use zellij_utils::input::options::Fps;
 #[allow(unused_imports)]
 use zellij_utils::shared::parse_base_url;
 
@@ -116,8 +117,13 @@ static PLUGIN_ANIMATION_OFFSET_DURATION_MD: u64 = 500;
 static SESSION_METADATA_WRITE_INTERVAL_MS: u64 = 1000;
 static UPDATE_AND_REPORT_CWDS_INTERVAL_MS: u64 = 1000;
 static DEFAULT_SERIALIZATION_INTERVAL: u64 = 60000;
-static REPAINT_DELAY_MS: u64 = 10;
+static DEFAULT_FPS: u32 = 60;
 static HELP_TEXT_DEBOUNCE_DURATION: u64 = 5000;
+
+fn repaint_delay(fps: Option<Fps>) -> Duration {
+    let fps = fps.map_or(DEFAULT_FPS, Fps::get);
+    Duration::from_millis(u64::from(1000 / fps))
+}
 
 #[derive(Clone)]
 pub struct SessionScanState {
@@ -136,6 +142,7 @@ pub fn session_scan_state() -> Option<&'static SessionScanState> {
 pub(crate) fn background_jobs_main(
     bus: Bus<BackgroundJob>,
     serialization_interval: Option<u64>,
+    fps: Option<Fps>,
     disable_session_metadata: bool,
     web_server_base_url: String,
 ) -> Result<()> {
@@ -156,6 +163,7 @@ pub(crate) fn background_jobs_main(
     let last_serialization_time = Arc::new(Mutex::new(Instant::now()));
     let serialization_interval = serialization_interval.map(|s| s * 1000); // convert to
                                                                            // milliseconds
+    let repaint_delay = repaint_delay(fps);
     let last_render_request: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     let pending_help_text_clear: Arc<Mutex<HashMap<ClientId, Instant>>> =
         Arc::new(Mutex::new(HashMap::new()));
@@ -467,8 +475,7 @@ pub(crate) fn background_jobs_main(
                         let last_render_request = last_render_request.clone();
                         let task_start_time = current_time;
                         async move {
-                            tokio::time::sleep(std::time::Duration::from_millis(REPAINT_DELAY_MS))
-                                .await;
+                            tokio::time::sleep(repaint_delay).await;
                             let _ = senders.send_to_screen(ScreenInstruction::RenderToClients);
                             {
                                 let mut last_render_request = last_render_request.lock().unwrap();
@@ -853,6 +860,36 @@ fn query_webserver_via_ipc(web_server_base_url: &str) -> Result<WebServerStatus>
     }
 
     Ok(WebServerStatus::Offline)
+}
+
+#[cfg(test)]
+mod repaint_tests {
+    use super::*;
+
+    #[test]
+    fn repaint_delay_defaults_to_60_fps() {
+        assert_eq!(repaint_delay(None), Duration::from_millis(16));
+    }
+
+    #[test]
+    fn repaint_delay_supports_50_fps() {
+        assert_eq!(repaint_delay(Fps::new(50)), Duration::from_millis(20));
+    }
+
+    #[test]
+    fn repaint_delay_supports_200_fps() {
+        assert_eq!(repaint_delay(Fps::new(200)), Duration::from_millis(5));
+    }
+
+    #[test]
+    fn repaint_delay_uses_whole_milliseconds() {
+        assert_eq!(repaint_delay(Fps::new(60)), Duration::from_millis(16));
+    }
+
+    #[test]
+    fn repaint_delay_supports_1000_fps() {
+        assert_eq!(repaint_delay(Fps::new(1000)), Duration::from_millis(1));
+    }
 }
 
 #[cfg(test)]

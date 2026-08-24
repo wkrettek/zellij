@@ -381,6 +381,13 @@ load_plugins {
 //
 // scroll_buffer_size 10000
 
+// Set the target terminal repaint rate in frames per second
+// (Requires restart)
+// Valid values: integers from 1 through 1000
+// Default value: 60
+//
+// fps 60
+
 // Provide a command to execute when copying text. The text will be piped to
 // the stdin of the program to perform the copy. This can be used with
 // terminal emulators which do not support the OSC 52 ANSI control sequence

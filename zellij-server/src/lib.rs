@@ -2067,6 +2067,7 @@ fn init_session(
     let data_dir = cli_assets.data_dir.unwrap_or_else(get_default_data_dir);
 
     let serialization_interval = config_options.serialization_interval;
+    let fps = config_options.fps;
     let disable_session_metadata = config_options.disable_session_metadata.unwrap_or(false);
     let web_server_ip = config_options
         .web_server_ip
@@ -2241,6 +2242,7 @@ fn init_session(
                 background_jobs_main(
                     background_jobs_bus,
                     serialization_interval,
+                    fps,
                     disable_session_metadata,
                     web_server_base_url,
                 )

@@ -109,6 +109,10 @@ on_force_close "quit"
 // Default value: 10000
 // 
 scroll_buffer_size 100
+
+// Set the target terminal repaint rate from 1 through 1000 frames per second.
+// Default: 60
+// fps 60
  
 // Provide a command to execute when copying text. The text will be piped to
 // the stdin of the program to perform the copy. This can be used with
