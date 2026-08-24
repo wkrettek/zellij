@@ -7,6 +7,7 @@ use zellij_utils::consts::{
 use zellij_utils::data::{Event, HttpVerb, LayoutInfo, SessionInfo, WebServerStatus};
 use zellij_utils::errors::{prelude::*, BackgroundJobContext, ContextType};
 use zellij_utils::input::layout::RunPlugin;
+use zellij_utils::input::options::Fps;
 #[allow(unused_imports)]
 use zellij_utils::shared::parse_base_url;
 
@@ -23,7 +24,6 @@ use isahc::{config::RedirectPolicy, HttpClient, Request};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write;
-use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -117,12 +117,12 @@ static PLUGIN_ANIMATION_OFFSET_DURATION_MD: u64 = 500;
 static SESSION_METADATA_WRITE_INTERVAL_MS: u64 = 1000;
 static UPDATE_AND_REPORT_CWDS_INTERVAL_MS: u64 = 1000;
 static DEFAULT_SERIALIZATION_INTERVAL: u64 = 60000;
-static DEFAULT_FPS: u32 = 100;
+static DEFAULT_FPS: u32 = 60;
 static HELP_TEXT_DEBOUNCE_DURATION: u64 = 5000;
 
-fn repaint_delay(fps: Option<NonZeroU32>) -> Duration {
-    let fps = fps.map_or(DEFAULT_FPS, NonZeroU32::get);
-    Duration::from_nanos(1_000_000_000_u64.div_ceil(u64::from(fps)))
+fn repaint_delay(fps: Option<Fps>) -> Duration {
+    let fps = fps.map_or(DEFAULT_FPS, Fps::get);
+    Duration::from_millis(u64::from(1000 / fps))
 }
 
 #[derive(Clone)]
@@ -142,7 +142,7 @@ pub fn session_scan_state() -> Option<&'static SessionScanState> {
 pub(crate) fn background_jobs_main(
     bus: Bus<BackgroundJob>,
     serialization_interval: Option<u64>,
-    fps: Option<NonZeroU32>,
+    fps: Option<Fps>,
     disable_session_metadata: bool,
     web_server_base_url: String,
 ) -> Result<()> {
@@ -867,32 +867,28 @@ mod repaint_tests {
     use super::*;
 
     #[test]
-    fn repaint_delay_defaults_to_100_fps() {
-        assert_eq!(repaint_delay(None), Duration::from_millis(10));
+    fn repaint_delay_defaults_to_60_fps() {
+        assert_eq!(repaint_delay(None), Duration::from_millis(16));
     }
 
     #[test]
     fn repaint_delay_supports_50_fps() {
-        assert_eq!(
-            repaint_delay(NonZeroU32::new(50)),
-            Duration::from_millis(20)
-        );
+        assert_eq!(repaint_delay(Fps::new(50)), Duration::from_millis(20));
     }
 
     #[test]
     fn repaint_delay_supports_200_fps() {
-        assert_eq!(
-            repaint_delay(NonZeroU32::new(200)),
-            Duration::from_millis(5)
-        );
+        assert_eq!(repaint_delay(Fps::new(200)), Duration::from_millis(5));
     }
 
     #[test]
-    fn repaint_delay_rounds_up_to_the_next_nanosecond() {
-        assert_eq!(
-            repaint_delay(NonZeroU32::new(60)),
-            Duration::from_nanos(16_666_667)
-        );
+    fn repaint_delay_uses_whole_milliseconds() {
+        assert_eq!(repaint_delay(Fps::new(60)), Duration::from_millis(16));
+    }
+
+    #[test]
+    fn repaint_delay_supports_1000_fps() {
+        assert_eq!(repaint_delay(Fps::new(1000)), Duration::from_millis(1));
     }
 }
 

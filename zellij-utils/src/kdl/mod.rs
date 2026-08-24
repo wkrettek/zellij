@@ -13,7 +13,7 @@ use crate::input::layout::{
     Layout, PercentOrFixed, PluginUserConfiguration, RunPlugin, RunPluginOrAlias, TabLayoutInfo,
 };
 use crate::input::options::{
-    Clipboard, OnForceClose, Options, PaneFrameStyle, DEFAULT_WORD_SEPARATORS,
+    Clipboard, Fps, OnForceClose, Options, PaneFrameStyle, DEFAULT_WORD_SEPARATORS,
 };
 use crate::input::permission::{GrantedPermission, PermissionCache};
 use crate::input::plugins::PluginAliases;
@@ -2781,17 +2781,9 @@ impl Options {
             kdl_property_first_arg_as_i64_or_error!(kdl_options, "scroll_buffer_size")
                 .map(|(scroll_buffer_size, _entry)| scroll_buffer_size as usize);
         let fps = match kdl_property_first_arg_as_i64_or_error!(kdl_options, "fps") {
-            Some((value, entry)) => match u32::try_from(value)
-                .ok()
-                .and_then(std::num::NonZeroU32::new)
-            {
-                Some(fps) => Some(fps),
-                None => {
-                    return Err(kdl_parsing_error!(
-                        format!("fps must be a positive 32-bit integer, found '{}'", value),
-                        entry
-                    ));
-                },
+            Some((value, entry)) => match Fps::try_from(value) {
+                Ok(fps) => Some(fps),
+                Err(error) => return Err(kdl_parsing_error!(error.to_string(), entry)),
             },
             None => None,
         };
@@ -3525,7 +3517,7 @@ impl Options {
         }
     }
     fn fps_to_kdl(&self, add_comments: bool) -> Option<KdlNode> {
-        let create_node = |fps: std::num::NonZeroU32| -> KdlNode {
+        let create_node = |fps: Fps| -> KdlNode {
             let mut node = KdlNode::new("fps");
             node.push(KdlValue::Base10(i64::from(fps.get())));
             node
@@ -3534,15 +3526,16 @@ impl Options {
             let mut node = create_node(fps);
             if add_comments {
                 node.set_leading(
-                    "\n// Limit the maximum number of terminal repaints per second.\n".to_owned(),
+                    "\n// Limit terminal repaints per second to a value from 1 through 1000.\n"
+                        .to_owned(),
                 );
             }
             Some(node)
         } else if add_comments {
             let mut node = KdlNode::new("fps");
-            node.push(KdlValue::Base10(100));
+            node.push(KdlValue::Base10(60));
             node.set_leading(
-                "\n// Limit the maximum number of terminal repaints per second.\n// Default: 100\n// "
+                "\n// Limit terminal repaints per second to a value from 1 through 1000.\n// Default: 60\n// "
                     .to_owned(),
             );
             Some(node)
@@ -7617,14 +7610,21 @@ fn fps_defaults_to_none_when_unspecified() {
 fn zero_fps_is_rejected() {
     let document: KdlDocument = "fps 0".parse().unwrap();
     let error = Options::from_kdl(&document).unwrap_err();
-    assert!(format!("{error:?}").contains("fps must be a positive 32-bit integer"));
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
 }
 
 #[test]
 fn negative_fps_is_rejected() {
     let document: KdlDocument = "fps -1".parse().unwrap();
     let error = Options::from_kdl(&document).unwrap_err();
-    assert!(format!("{error:?}").contains("fps must be a positive 32-bit integer"));
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
+}
+
+#[test]
+fn fps_above_maximum_is_rejected() {
+    let document: KdlDocument = "fps 1001".parse().unwrap();
+    let error = Options::from_kdl(&document).unwrap_err();
+    assert!(format!("{error:?}").contains("fps must be between 1 and 1000"));
 }
 
 #[test]

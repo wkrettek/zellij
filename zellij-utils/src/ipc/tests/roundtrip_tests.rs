@@ -14,7 +14,7 @@ use crate::input::layout::{
 };
 use crate::input::mouse::{MouseEvent, MouseEventType};
 use crate::input::options::{
-    Clipboard, NestedSessionHandling, OnForceClose, Options, PaneFrameStyle,
+    Clipboard, Fps, NestedSessionHandling, OnForceClose, Options, PaneFrameStyle,
 };
 use crate::ipc::{
     ClientToServerMsg, ColorRegister, ExitReason, MobileActivePanePayload, MobilePanePayload,
@@ -24,7 +24,6 @@ use crate::ipc::{
 use crate::pane_size::{Size, SizeInPixels};
 use crate::position::Position;
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroU32;
 use std::path::PathBuf;
 
 const ROUNDTRIP_TEST_STACK_SIZE: usize = 32 * 1024 * 1024;
@@ -462,7 +461,7 @@ fn test_client_messages() {
                 mirror_session: Some(true),
                 on_force_close: Some(OnForceClose::Quit),
                 scroll_buffer_size: Some(100000),
-                fps: NonZeroU32::new(60),
+                fps: Fps::new(60),
                 copy_command: Some("copy_command".to_owned()),
                 copy_clipboard: Some(Clipboard::System),
                 copy_on_select: Some(true),
@@ -3741,7 +3740,7 @@ fn test_client_messages() {
 #[test]
 fn fps_client_server_contract_round_trip() {
     let options = Options {
-        fps: NonZeroU32::new(60),
+        fps: Fps::new(60),
         ..Default::default()
     };
     let proto_options: crate::client_server_contract::client_server_contract::Options =
@@ -3754,6 +3753,16 @@ fn fps_client_server_contract_round_trip() {
 fn zero_fps_is_rejected_from_client_server_contract() {
     let proto_options = crate::client_server_contract::client_server_contract::Options {
         fps: Some(0),
+        ..Default::default()
+    };
+    let options: anyhow::Result<Options> = proto_options.try_into();
+    assert!(options.is_err());
+}
+
+#[test]
+fn fps_above_maximum_is_rejected_from_client_server_contract() {
+    let proto_options = crate::client_server_contract::client_server_contract::Options {
+        fps: Some(1001),
         ..Default::default()
     };
     let options: anyhow::Result<Options> = proto_options.try_into();

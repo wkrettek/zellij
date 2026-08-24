@@ -1017,9 +1017,7 @@ impl TryFrom<crate::client_server_contract::client_server_contract::Options>
             scroll_buffer_size: options.scroll_buffer_size.map(|s| s as usize),
             fps: options
                 .fps
-                .map(|fps| {
-                    std::num::NonZeroU32::new(fps).ok_or_else(|| anyhow!("Invalid fps value: 0"))
-                })
+                .map(crate::input::options::Fps::try_from)
                 .transpose()?,
             copy_command: options.copy_command,
             copy_clipboard: options
