@@ -395,7 +395,7 @@ web_client {
 // 
 // scroll_buffer_size 10000
 
-// Limit terminal repaints per second to a value from 1 through 1000.
+// Set the target terminal repaint rate from 1 through 1000 frames per second.
 // Default: 60
 // fps 60
  

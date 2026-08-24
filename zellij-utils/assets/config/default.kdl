@@ -381,7 +381,7 @@ load_plugins {
 //
 // scroll_buffer_size 10000
 
-// Limit terminal repaints per second
+// Set the target terminal repaint rate in frames per second
 // (Requires restart)
 // Valid values: integers from 1 through 1000
 // Default value: 60

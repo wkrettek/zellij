@@ -3526,7 +3526,7 @@ impl Options {
             let mut node = create_node(fps);
             if add_comments {
                 node.set_leading(
-                    "\n// Limit terminal repaints per second to a value from 1 through 1000.\n"
+                    "\n// Set the target terminal repaint rate from 1 through 1000 frames per second.\n"
                         .to_owned(),
                 );
             }
@@ -3535,7 +3535,7 @@ impl Options {
             let mut node = KdlNode::new("fps");
             node.push(KdlValue::Base10(60));
             node.set_leading(
-                "\n// Limit terminal repaints per second to a value from 1 through 1000.\n// Default: 60\n// "
+                "\n// Set the target terminal repaint rate from 1 through 1000 frames per second.\n// Default: 60\n// "
                     .to_owned(),
             );
             Some(node)

@@ -254,7 +254,7 @@ pub struct Options {
     #[clap(long, value_parser)]
     pub scroll_buffer_size: Option<usize>,
 
-    /// Maximum number of terminal repaints per second, from 1 through 1000
+    /// Target terminal repaint rate in frames per second, from 1 through 1000
     #[clap(long, value_parser)]
     pub fps: Option<Fps>,
 
