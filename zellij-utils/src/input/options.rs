@@ -3,6 +3,7 @@ use crate::cli::Command;
 use crate::data::{InputMode, WebSharing};
 use clap::{Args, ValueEnum};
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -182,6 +183,10 @@ pub struct Options {
     pub on_force_close: Option<OnForceClose>,
     #[clap(long, value_parser)]
     pub scroll_buffer_size: Option<usize>,
+
+    /// Maximum number of terminal repaints per second
+    #[clap(long, value_parser)]
+    pub fps: Option<NonZeroU32>,
 
     /// Switch to using a user supplied command for clipboard instead of OSC52
     #[clap(long, value_parser)]
@@ -460,6 +465,7 @@ impl Options {
         let theme_light = other.theme_light.or_else(|| self.theme_light.clone());
         let on_force_close = other.on_force_close.or(self.on_force_close);
         let scroll_buffer_size = other.scroll_buffer_size.or(self.scroll_buffer_size);
+        let fps = other.fps.or(self.fps);
         let copy_command = other.copy_command.or_else(|| self.copy_command.clone());
         let copy_clipboard = other.copy_clipboard.or(self.copy_clipboard);
         let copy_on_select = other.copy_on_select.or(self.copy_on_select);
@@ -546,6 +552,7 @@ impl Options {
             mirror_session,
             on_force_close,
             scroll_buffer_size,
+            fps,
             copy_command,
             copy_clipboard,
             copy_on_select,
@@ -625,6 +632,7 @@ impl Options {
         let theme_light = other.theme_light.or_else(|| self.theme_light.clone());
         let on_force_close = other.on_force_close.or(self.on_force_close);
         let scroll_buffer_size = other.scroll_buffer_size.or(self.scroll_buffer_size);
+        let fps = other.fps.or(self.fps);
         let copy_command = other.copy_command.or_else(|| self.copy_command.clone());
         let copy_clipboard = other.copy_clipboard.or(self.copy_clipboard);
         let copy_on_select = other.copy_on_select.or(self.copy_on_select);
@@ -707,6 +715,7 @@ impl Options {
             mirror_session,
             on_force_close,
             scroll_buffer_size,
+            fps,
             copy_command,
             copy_clipboard,
             copy_on_select,

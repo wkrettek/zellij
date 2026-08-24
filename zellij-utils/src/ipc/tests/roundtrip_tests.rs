@@ -24,6 +24,7 @@ use crate::ipc::{
 use crate::pane_size::{Size, SizeInPixels};
 use crate::position::Position;
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 
 const ROUNDTRIP_TEST_STACK_SIZE: usize = 32 * 1024 * 1024;
@@ -461,6 +462,7 @@ fn test_client_messages() {
                 mirror_session: Some(true),
                 on_force_close: Some(OnForceClose::Quit),
                 scroll_buffer_size: Some(100000),
+                fps: NonZeroU32::new(60),
                 copy_command: Some("copy_command".to_owned()),
                 copy_clipboard: Some(Clipboard::System),
                 copy_on_select: Some(true),
@@ -3734,6 +3736,28 @@ fn test_client_messages() {
     test_client_roundtrip!(ClientToServerMsg::NestedSessionFrameFromHost {
         payload_bytes: (0u8..=255u8).collect(),
     });
+}
+
+#[test]
+fn fps_client_server_contract_round_trip() {
+    let options = Options {
+        fps: NonZeroU32::new(60),
+        ..Default::default()
+    };
+    let proto_options: crate::client_server_contract::client_server_contract::Options =
+        options.clone().into();
+    let round_trip: Options = proto_options.try_into().unwrap();
+    assert_eq!(round_trip, options);
+}
+
+#[test]
+fn zero_fps_is_rejected_from_client_server_contract() {
+    let proto_options = crate::client_server_contract::client_server_contract::Options {
+        fps: Some(0),
+        ..Default::default()
+    };
+    let options: anyhow::Result<Options> = proto_options.try_into();
+    assert!(options.is_err());
 }
 
 fn test_server_messages() {

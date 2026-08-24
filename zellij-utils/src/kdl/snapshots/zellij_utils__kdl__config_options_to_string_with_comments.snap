@@ -109,6 +109,10 @@ on_force_close "quit"
 // Default value: 10000
 // 
 scroll_buffer_size 100
+
+// Limit the maximum number of terminal repaints per second.
+// Default: 100
+// fps 100
  
 // Provide a command to execute when copying text. The text will be piped to
 // the stdin of the program to perform the copy. This can be used with

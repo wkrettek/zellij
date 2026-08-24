@@ -4005,8 +4005,8 @@ impl Screen {
     }
 
     pub fn render(&mut self, plugin_render_assets: Option<Vec<PluginRenderAsset>>) -> Result<()> {
-        // here we schedule the RenderToClients background job which debounces renders every 10ms
-        // rather than actually rendering
+        // here we schedule the RenderToClients background job which debounces renders according
+        // to the configured repaint limit rather than actually rendering
         //
         // when this job decides to render, it sends back the ScreenInstruction::RenderToClients
         // message, triggering our render_to_clients method which does the actual rendering
